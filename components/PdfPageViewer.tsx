@@ -74,7 +74,10 @@ export function PdfPageViewer({
       if (!config) continue;
 
       const currentValue = config.text !== undefined ? config.text : item.originalText;
-      const isEdited = currentValue !== item.originalText;
+      const isEdited =
+        currentValue !== item.originalText ||
+        (config.fontSize && Math.abs(config.fontSize - item.fontSize) > 0.05) ||
+        (config.extraWidth && config.extraWidth > 0);
       if (!isEdited) continue;
 
       // Coordinate calculation
@@ -96,7 +99,7 @@ export function PdfPageViewer({
 
       let bgTop = item.sampledBgColor || { r: 255, g: 255, b: 255 };
       let bgBottom = item.sampledBgColor || { r: 255, g: 255, b: 255 };
-      let textCol = item.sampledTextColor || { r: 51, g: 51, b: 51 };
+      let textCol = item.sampledTextColor || { r: 33, g: 37, b: 41 };
 
       // If not yet sampled, sample from base canvas
       if (!item.sampledBgColor && baseCtx) {
@@ -108,13 +111,20 @@ export function PdfPageViewer({
           if (lum > 0.82) {
             bgTop = { r: 255, g: 255, b: 255 };
             bgBottom = { r: 255, g: 255, b: 255 };
-            textCol = { r: 51, g: 51, b: 51 };
+            textCol = { r: 33, g: 37, b: 41 };
           } else {
             bgTop = { r: p[0], g: p[1], b: p[2] };
             bgBottom = { r: p[0], g: p[1], b: p[2] };
             textCol = lum < 0.5 ? { r: 255, g: 255, b: 255 } : { r: 15, g: 23, b: 42 };
           }
         } catch (e) {}
+      }
+
+      // Enforce high-contrast readability so text NEVER matches or blends with background
+      const bgLum = (0.299 * bgTop.r + 0.587 * bgTop.g + 0.114 * bgTop.b) / 255;
+      const textLum = (0.299 * textCol.r + 0.587 * textCol.g + 0.114 * textCol.b) / 255;
+      if (Math.abs(bgLum - textLum) < 0.28) {
+        textCol = bgLum > 0.5 ? { r: 33, g: 37, b: 41 } : { r: 255, g: 255, b: 255 };
       }
 
       // Erase original glyphs using seamless gradient matching exact background
@@ -138,6 +148,15 @@ export function PdfPageViewer({
       }
     }
   }, [scale]);
+
+  // Redraw canvas edits once browser fonts are fully loaded
+  useEffect(() => {
+    if (typeof document !== 'undefined' && (document as any).fonts) {
+      (document as any).fonts.ready.then(() => {
+        drawEditsOnCanvas();
+      });
+    }
+  }, [drawEditsOnCanvas]);
 
   // PDF.js Page Rendering: Strictly dependent on pdfDoc, pageIndex, and scale ONLY
   useEffect(() => {

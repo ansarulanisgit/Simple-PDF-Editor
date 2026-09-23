@@ -50,24 +50,20 @@ export function FileUploader({ onFileSelect, isLoading }: FileUploaderProps) {
   const handleLoadSample = async () => {
     try {
       setErrorMsg(null);
-      // Bust cache to ensure the clean, uncorrupted demo PDF is loaded every time
-      const res = await fetch(`/demo.pdf?t=${Date.now()}`);
+      // Bust cache to ensure the clean demo PDF is loaded every time
+      let res = await fetch(`/BDRAILWAY_TICKET2026092312220870385853.pdf?t=${Date.now()}`);
       if (!res.ok) {
-        // Fallback to sample-ticket.pdf
-        const fallback = await fetch(`/sample-ticket.pdf?t=${Date.now()}`);
-        if (!fallback.ok) {
-          throw new Error('Failed to load demo PDF');
-        }
-        const buffer = await fallback.arrayBuffer();
-        onFileSelect({
-          name: 'bangladesh-railway-ticket.pdf',
-          buffer,
-        });
-        return;
+        res = await fetch(`/demo.pdf?t=${Date.now()}`);
+      }
+      if (!res.ok) {
+        res = await fetch(`/sample-ticket.pdf?t=${Date.now()}`);
+      }
+      if (!res.ok) {
+        throw new Error('Failed to load demo PDF');
       }
       const buffer = await res.arrayBuffer();
       onFileSelect({
-        name: 'bangladesh-railway-ticket.pdf',
+        name: 'BDRAILWAY_TICKET2026092312220870385853.pdf',
         buffer,
       });
     } catch (err) {

@@ -3,6 +3,8 @@ import { TextItemModel, PageInfo, ColorRgb } from './types';
 /**
  * Samples the underlying canvas pixels around and within each text item
  * to accurately determine the document background color and original text color.
+ * Uses median perimeter sampling to avoid table border interference,
+ * directional contrast scanning to identify glyph strokes, and strict contrast enforcement.
  */
 export function sampleColorsForItems(
   canvas: HTMLCanvasElement,
@@ -19,7 +21,7 @@ export function sampleColorsForItems(
   const canvasH = canvas.height;
   if (canvasW <= 0 || canvasH <= 0) return result;
 
-  // Perform a SINGLE readback of the canvas buffer (100x faster than thousands of getImageData(1,1) calls)
+  // Single fast readback of the full canvas buffer
   let data: Uint8ClampedArray;
   try {
     const fullImageData = ctx.getImageData(0, 0, canvasW, canvasH);
@@ -46,79 +48,81 @@ export function sampleColorsForItems(
     // Coordinate conversion from PDF points to canvas pixels
     const canvasX = Math.round(item.pdfX * scale * dpr);
     const canvasBaselineY = Math.round((pageInfo.pdfHeight - item.pdfY) * scale * dpr);
-    const itemWPx = Math.round(item.pdfWidth * scale * dpr);
-    const itemHPx = Math.round(item.fontSize * scale * dpr);
+    const itemWPx = Math.max(Math.round(item.pdfWidth * scale * dpr), 8);
+    const itemHPx = Math.max(Math.round(item.fontSize * scale * dpr), 8);
     const topY = Math.round(canvasBaselineY - itemHPx * 0.88);
 
-    // Sample perimeter points around the text bounding box for the background color
-    const perimeterPoints = [
-      { x: canvasX - 5 * dpr, y: topY + itemHPx / 2 },          // Left
-      { x: canvasX + itemWPx + 5 * dpr, y: topY + itemHPx / 2 },// Right
-      { x: canvasX + itemWPx / 2, y: topY - 4 * dpr },          // Top
-      { x: canvasX + itemWPx / 2, y: topY + itemHPx + 4 * dpr },// Bottom
-      { x: canvasX - 3 * dpr, y: topY - 3 * dpr },              // Top-Left
-      { x: canvasX + itemWPx + 3 * dpr, y: topY - 3 * dpr },    // Top-Right
-    ];
+    // 1. Immediate perimeter sampling:
+    // Sample points immediately adjacent (1-2px outside) to avoid hitting adjacent table borders/cells
+    const perimeterSamples = [
+      getPixel(canvasX - 2 * dpr, topY + itemHPx * 0.5),          // immediate left
+      getPixel(canvasX + itemWPx + 2 * dpr, topY + itemHPx * 0.5),// immediate right
+      getPixel(canvasX + itemWPx * 0.2, topY - 1 * dpr),          // immediate top-left
+      getPixel(canvasX + itemWPx * 0.8, topY - 1 * dpr),          // immediate top-right
+      getPixel(canvasX + itemWPx * 0.2, canvasBaselineY + 1 * dpr),// immediate bottom-left
+      getPixel(canvasX + itemWPx * 0.8, canvasBaselineY + 1 * dpr),// immediate bottom-right
+    ].filter((p) => p.a > 50);
 
-    let totalR = 0;
-    let totalG = 0;
-    let totalB = 0;
-    let sampleCount = 0;
+    // Sort perimeter samples by luminance to select median (eliminates border line contamination!)
+    perimeterSamples.sort((a, b) => {
+      const lumA = 0.299 * a.r + 0.587 * a.g + 0.114 * a.b;
+      const lumB = 0.299 * b.r + 0.587 * b.g + 0.114 * b.b;
+      return lumA - lumB;
+    });
 
-    for (const pt of perimeterPoints) {
-      const p = getPixel(pt.x, pt.y);
-      if (p.a > 50) {
-        totalR += p.r;
-        totalG += p.g;
-        totalB += p.b;
-        sampleCount++;
-      }
-    }
+    const medianSample = perimeterSamples[Math.floor(perimeterSamples.length / 2)] || { r: 255, g: 255, b: 255 };
+    const bgLum = (0.299 * medianSample.r + 0.587 * medianSample.g + 0.114 * medianSample.b) / 255;
 
-    const bgR = sampleCount > 0 ? Math.round(totalR / sampleCount) : 255;
-    const bgG = sampleCount > 0 ? Math.round(totalG / sampleCount) : 255;
-    const bgB = sampleCount > 0 ? Math.round(totalB / sampleCount) : 255;
-
-    // Calculate background luminance (0 to 1)
-    const rawLum = (0.299 * bgR + 0.587 * bgG + 0.114 * bgB) / 255;
-
-    // If background is light/white paper (>0.82), snap to pure white (255, 255, 255)
-    // so nearby table border lines or grid strokes do not tint the white paper gray!
+    // Snap near-white paper (>0.82) to pure white (#ffffff)
     const sampledBgColor: ColorRgb =
-      rawLum > 0.82 ? { r: 255, g: 255, b: 255 } : { r: bgR, g: bgG, b: bgB };
+      bgLum > 0.82
+        ? { r: 255, g: 255, b: 255 }
+        : { r: medianSample.r, g: medianSample.g, b: medianSample.b };
 
-    const bgLuminance = (0.299 * sampledBgColor.r + 0.587 * sampledBgColor.g + 0.114 * sampledBgColor.b) / 255;
-    const isDarkBg = bgLuminance < 0.5;
+    const isDarkBg = bgLum < 0.5;
 
-    // Default high-contrast text color based on luminance
-    let textR = isDarkBg ? 255 : 0;
-    let textG = isDarkBg ? 255 : 0;
-    let textB = isDarkBg ? 255 : 0;
-    let bestContrastDiff = 0;
+    // 2. Scan across the interior glyph area across 3 horizontal tracks to locate genuine text glyph strokes
+    let bestGlyphColor: ColorRgb | null = null;
+    let maxContrast = 0;
 
-    // Sample interior glyph pixels to detect custom text color (e.g. golden, white, green)
-    const interiorSamples = [
-      { x: canvasX + itemWPx * 0.25, y: topY + itemHPx * 0.5 },
-      { x: canvasX + itemWPx * 0.5, y: topY + itemHPx * 0.5 },
-      { x: canvasX + itemWPx * 0.75, y: topY + itemHPx * 0.5 },
-      { x: canvasX + itemWPx * 0.5, y: topY + itemHPx * 0.3 },
-      { x: canvasX + itemWPx * 0.5, y: topY + itemHPx * 0.7 },
-    ];
+    const ySteps = [0.3, 0.5, 0.7];
+    const xStepCount = Math.min(Math.max(Math.floor(itemWPx / 3), 4), 25);
 
-    for (const pt of interiorSamples) {
-      const p = getPixel(pt.x, pt.y);
-      if (p.a > 100) {
-        const diff = Math.abs(p.r - bgR) + Math.abs(p.g - bgG) + Math.abs(p.b - bgB);
-        if (diff > bestContrastDiff && diff > 75) {
-          bestContrastDiff = diff;
-          textR = p.r;
-          textG = p.g;
-          textB = p.b;
+    for (const yFrac of ySteps) {
+      const sy = topY + itemHPx * yFrac;
+      for (let i = 0; i <= xStepCount; i++) {
+        const sx = canvasX + (itemWPx * i) / xStepCount;
+        const p = getPixel(sx, sy);
+        if (p.a < 100) continue;
+
+        const pLum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b) / 255;
+        // Directional contrast:
+        // On light background, glyph strokes MUST be darker (bgLum - pLum > 0.22)
+        // On dark background, glyph strokes MUST be lighter (pLum - bgLum > 0.22)
+        const contrast = isDarkBg ? pLum - bgLum : bgLum - pLum;
+
+        if (contrast > maxContrast && contrast > 0.22) {
+          maxContrast = contrast;
+          bestGlyphColor = { r: p.r, g: p.g, b: p.b };
         }
       }
     }
 
-    const sampledTextColor: ColorRgb = { r: textR, g: textG, b: textB };
+    // 3. Fallback and Strict Contrast Enforcement
+    let sampledTextColor: ColorRgb;
+    if (bestGlyphColor) {
+      sampledTextColor = bestGlyphColor;
+    } else {
+      // High-contrast default fallback
+      sampledTextColor = isDarkBg ? { r: 255, g: 255, b: 255 } : { r: 33, g: 37, b: 41 };
+    }
+
+    // Absolute contrast safeguard: Text color must NEVER blend into background color
+    const textLum = (0.299 * sampledTextColor.r + 0.587 * sampledTextColor.g + 0.114 * sampledTextColor.b) / 255;
+    if (Math.abs(bgLum - textLum) < 0.28) {
+      sampledTextColor = bgLum > 0.5 ? { r: 33, g: 37, b: 41 } : { r: 255, g: 255, b: 255 };
+    }
+
     result[item.id] = { sampledBgColor, sampledTextColor };
   }
 

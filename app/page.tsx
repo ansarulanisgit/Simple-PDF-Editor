@@ -15,7 +15,6 @@ import { Toolbar } from '@/components/Toolbar';
 import { FileUploader } from '@/components/FileUploader';
 import { PdfPageViewer } from '@/components/PdfPageViewer';
 import { TextEditModal } from '@/components/TextEditModal';
-import { LimitationsModal } from '@/components/LimitationsModal';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function PdfEditorPage() {
@@ -33,7 +32,6 @@ export default function PdfEditorPage() {
   // Configurations map keyed by text item ID: text, fontSize, extraWidth
   const [configsMap, setConfigsMap] = useState<Record<string, ItemEditConfig>>({});
   const [selectedItem, setSelectedItem] = useState<TextItemModel | null>(null);
-  const [isLimitationsOpen, setIsLimitationsOpen] = useState<boolean>(false);
 
   // Undo / Redo History Stack
   const [history, setHistory] = useState<Record<string, ItemEditConfig>[]>([{}]);
@@ -264,7 +262,7 @@ export default function PdfEditorPage() {
         let changed = false;
         const updated = currentList.map((item) => {
           const sampled = colorsMap[item.id];
-          if (sampled && (!item.sampledBgColor || !item.sampledTextColor)) {
+          if (sampled) {
             changed = true;
             return {
               ...item,
@@ -352,7 +350,19 @@ export default function PdfEditorPage() {
         fileName || 'edited-document.pdf'
       );
 
-      const downloadName = (fileName || 'document.pdf').replace(/\.pdf$/i, '-edited.pdf');
+      let downloadName = fileName || 'document.pdf';
+      const cleanName = downloadName.replace(/\.pdf$/i, '');
+      if (/^BDRAILWAY_TICKET\d{4,}$/i.test(cleanName)) {
+        // Change the last 4 digits randomly for the demo ticket
+        const oldLast4 = cleanName.slice(-4);
+        let random4 = oldLast4;
+        while (random4 === oldLast4) {
+          random4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+        }
+        downloadName = `${cleanName.slice(0, -4)}${random4}.pdf`;
+      } else {
+        downloadName = `${cleanName}-edited.pdf`;
+      }
       triggerDownload(exportedBlob, downloadName);
 
       confetti({
@@ -429,7 +439,6 @@ export default function PdfEditorPage() {
               canRedo={canRedo}
               onUndo={handleUndo}
               onRedo={handleRedo}
-              onOpenNotes={() => setIsLimitationsOpen(true)}
             />
 
             {/* Document Canvas and Overlay Canvas */}
@@ -469,12 +478,6 @@ export default function PdfEditorPage() {
             handleResetField(selectedItem.id);
           }
         }}
-      />
-
-      {/* Technical Notes & Features Modal */}
-      <LimitationsModal
-        isOpen={isLimitationsOpen}
-        onClose={() => setIsLimitationsOpen(false)}
       />
     </div>
   );

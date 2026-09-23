@@ -319,16 +319,16 @@ export async function exportModifiedPdf(
     // Exact text color from original PDF stream:
     // If the original operator color is parsed, use it directly!
     // Otherwise fallback to sampledTextColor or dark charcoal.
-    let textRgb: any;
-    if (origProps?.color) {
-      textRgb = rgb(origProps.color.r / 255, origProps.color.g / 255, origProps.color.b / 255);
-    } else if (item.sampledTextColor) {
-      textRgb = rgb(item.sampledTextColor.r / 255, item.sampledTextColor.g / 255, item.sampledTextColor.b / 255);
-    } else if (isDarkBg) {
-      textRgb = rgb(1, 1, 1);
+    let chosenColor = origProps?.color || item.sampledTextColor;
+    if (chosenColor) {
+      const cLum = (0.299 * chosenColor.r + 0.587 * chosenColor.g + 0.114 * chosenColor.b) / 255;
+      if (Math.abs(bgLuminance - cLum) < 0.28) {
+        chosenColor = isDarkBg ? { r: 255, g: 255, b: 255 } : { r: 33, g: 37, b: 41 };
+      }
     } else {
-      textRgb = rgb(0.2, 0.2, 0.2); // exact dark charcoal matching Bangladesh Railway / standard tickets
+      chosenColor = isDarkBg ? { r: 255, g: 255, b: 255 } : { r: 33, g: 37, b: 41 };
     }
+    const textRgb = rgb(chosenColor.r / 255, chosenColor.g / 255, chosenColor.b / 255);
 
     // Cover old text with a clean, perfectly fitted eraser rectangle:
     // Sits snugly within the cell so it never touches or cuts into cell borders

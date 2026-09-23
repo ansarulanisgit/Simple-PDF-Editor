@@ -8,7 +8,6 @@ import {
   Undo2,
   Redo2,
   RotateCcw,
-  Info,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -24,7 +23,6 @@ interface ToolbarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
-  onOpenNotes?: () => void;
 }
 
 export function Toolbar({
@@ -40,7 +38,6 @@ export function Toolbar({
   canRedo,
   onUndo,
   onRedo,
-  onOpenNotes,
 }: ToolbarProps) {
   const zoomIn = () => {
     onScaleChange(Math.min(3.0, Number((scale + 0.2).toFixed(2))));
@@ -51,8 +48,8 @@ export function Toolbar({
   };
 
   return (
-    <div className="sticky top-14 sm:top-16 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs px-2 sm:px-4 py-2 transition-colors">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3 text-xs">
+    <div className="sticky top-14 sm:top-16 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs px-2 sm:px-4 py-1.5 sm:py-2 transition-colors overflow-x-auto scrollbar-none">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3 text-xs min-w-max sm:min-w-0">
         {/* Page Navigation */}
         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-0.5 sm:p-1 rounded-xl shrink-0">
           <button
@@ -153,19 +150,6 @@ export function Toolbar({
           >
             <Redo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-700 dark:text-slate-200" />
           </button>
-
-          {/* Technical Notes / Info Button */}
-          {onOpenNotes && (
-            <button
-              type="button"
-              onClick={onOpenNotes}
-              className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 transition shadow-2xs cursor-pointer active:scale-95"
-              title="Technical Notes & Features"
-              aria-label="Technical Notes"
-            >
-              <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </button>
-          )}
         </div>
       </div>
     </div>
