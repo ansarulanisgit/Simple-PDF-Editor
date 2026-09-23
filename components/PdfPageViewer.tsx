@@ -144,7 +144,7 @@ export function PdfPageViewer({
       const normalizedDisplayVal = decodeBengaliPua(currentValue);
       if (normalizedDisplayVal && normalizedDisplayVal.trim().length > 0) {
         ctx.fillStyle = `rgb(${textCol.r}, ${textCol.g}, ${textCol.b})`;
-        ctx.font = `${fontPx}px 'Roboto', 'Noto Serif Bengali', 'SolaimanLipiNormal', 'SolaimanLipi', 'Noto Sans Bengali', Arial, sans-serif`;
+        ctx.font = `${fontPx}px 'Roboto', 'SolaimanLipiNormal', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif`;
         ctx.textBaseline = 'alphabetic';
         ctx.fillText(normalizedDisplayVal, canvasX, canvasY);
       }

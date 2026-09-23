@@ -177,8 +177,8 @@ async function renderBengaliSnippetToPng(
     try {
       await (document as any).fonts.ready;
       await Promise.allSettled([
-        (document as any).fonts.load(`${fontSizePt}px "Noto Serif Bengali"`),
         (document as any).fonts.load(`${fontSizePt}px "SolaimanLipiNormal"`),
+        (document as any).fonts.load(`${fontSizePt}px "Noto Sans Bengali"`),
         (document as any).fonts.load(`${fontSizePt}px "SolaimanLipi"`),
         (document as any).fonts.load(`${fontSizePt}px "Roboto"`),
       ]);
@@ -203,7 +203,7 @@ async function renderBengaliSnippetToPng(
     throw new Error('Could not obtain 2D canvas context');
   }
 
-  const fontStyle = `${fontSizePt}px 'Roboto', 'Noto Serif Bengali', 'SolaimanLipiNormal', 'SolaimanLipi', 'Noto Sans Bengali', Arial, sans-serif`;
+  const fontStyle = `${fontSizePt}px 'Roboto', 'SolaimanLipiNormal', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif`;
   ctx.font = fontStyle;
   const metrics = ctx.measureText(text);
 
@@ -271,14 +271,14 @@ export async function exportModifiedPdf(
 
   if (!cachedBengaliFontBytes) {
     try {
-      cachedBengaliFontBytes = await loadFontBytes('/fonts/NotoSerifBengali-Regular.ttf');
+      cachedBengaliFontBytes = await loadFontBytes('/fonts/SolaimanLipiNormal.ttf');
     } catch (e1) {
-      console.warn('Could not load NotoSerifBengali-Regular.ttf, falling back:', e1);
+      console.warn('Could not load SolaimanLipiNormal.ttf, falling back:', e1);
       try {
-        cachedBengaliFontBytes = await loadFontBytes('/fonts/SolaimanLipiNormal.ttf');
+        cachedBengaliFontBytes = await loadFontBytes('/fonts/NotoSansBengali-Regular.ttf');
       } catch (e2) {
         try {
-          cachedBengaliFontBytes = await loadFontBytes('/fonts/NotoSansBengali-Regular.ttf');
+          cachedBengaliFontBytes = await loadFontBytes('/fonts/SolaimanLipi.ttf');
         } catch (e3) {
           console.warn('Could not load Bengali font:', e3);
         }
