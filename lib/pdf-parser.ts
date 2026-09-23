@@ -147,15 +147,18 @@ export async function extractPageTextRuns(
         !item.originalText.startsWith(' ');
 
       const combinedText = currentGroup.originalText + (needsSpace ? ' ' : '') + item.originalText;
+      const normalizedCombined = decodeBengaliPua(combinedText);
       const newWidth = Math.max(item.pdfX + item.pdfWidth - currentGroup.pdfX, currentGroup.pdfWidth + item.pdfWidth);
 
-      currentGroup.originalText = combinedText;
-      currentGroup.currentText = combinedText;
+      currentGroup.originalText = normalizedCombined;
+      currentGroup.currentText = normalizedCombined;
       currentGroup.pdfWidth = newWidth;
       currentGroup.pdfHeight = Math.max(currentGroup.pdfHeight, item.pdfHeight);
       currentGroup.fontSize = Math.max(currentGroup.fontSize, item.fontSize);
       currentGroup.subItemCount = (currentGroup.subItemCount || 1) + 1;
     } else {
+      currentGroup.originalText = decodeBengaliPua(currentGroup.originalText);
+      currentGroup.currentText = currentGroup.originalText;
       grouped.push(currentGroup);
       currentGroup = {
         ...item,
@@ -167,6 +170,8 @@ export async function extractPageTextRuns(
   }
 
   if (currentGroup) {
+    currentGroup.originalText = decodeBengaliPua(currentGroup.originalText);
+    currentGroup.currentText = currentGroup.originalText;
     grouped.push(currentGroup);
   }
 

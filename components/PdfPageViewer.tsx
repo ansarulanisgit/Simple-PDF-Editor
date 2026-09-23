@@ -3,6 +3,7 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/types/src/displa
 import { TextItemModel, PageInfo, ItemEditConfig, ColorRgb } from '@/lib/types';
 import { RotateCcw, Edit2, GripVertical } from 'lucide-react';
 import { sampleColorsForItems } from '@/lib/color-sampler';
+import { decodeBengaliPua } from '@/lib/bengali-pua';
 
 interface PdfPageViewerProps {
   pdfDoc: PDFDocumentProxy;
@@ -140,11 +141,12 @@ export function PdfPageViewer({
       ctx.fillRect(eraseX, eraseY, eraseW, eraseH);
 
       // Draw replacement text natively on canvas
-      if (currentValue && currentValue.trim().length > 0) {
+      const normalizedDisplayVal = decodeBengaliPua(currentValue);
+      if (normalizedDisplayVal && normalizedDisplayVal.trim().length > 0) {
         ctx.fillStyle = `rgb(${textCol.r}, ${textCol.g}, ${textCol.b})`;
         ctx.font = `${fontPx}px 'Roboto', 'Noto Serif Bengali', 'SolaimanLipiNormal', 'SolaimanLipi', 'Noto Sans Bengali', Arial, sans-serif`;
         ctx.textBaseline = 'alphabetic';
-        ctx.fillText(currentValue, canvasX, canvasY);
+        ctx.fillText(normalizedDisplayVal, canvasX, canvasY);
       }
     }
   }, [scale]);

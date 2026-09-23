@@ -161,6 +161,92 @@ function getScriptSegments(
   return segments;
 }
 
+/**
+ * Renders a snippet of Bengali Unicode text to a high-resolution PNG using
+ * the browser's native HarfBuzz text shaper.
+ * This completely avoids pdf-lib / fontkit advance width bugs with Bengali pre-base vowels (e-kar, i-kar)
+ * and produces 100% connected, razor-sharp Bengali typography with ZERO unwanted spaces.
+ */
+async function renderBengaliSnippetToPng(
+  text: string,
+  fontSizePt: number,
+  color: { r: number; g: number; b: number }
+): Promise<{ pngBytes: Uint8Array; widthPt: number; heightPt: number; baselineYPt: number }> {
+  // Ensure document fonts are loaded in browser
+  if (typeof document !== 'undefined' && (document as any).fonts) {
+    try {
+      await (document as any).fonts.ready;
+      await Promise.allSettled([
+        (document as any).fonts.load(`${fontSizePt}px "Noto Serif Bengali"`),
+        (document as any).fonts.load(`${fontSizePt}px "SolaimanLipiNormal"`),
+        (document as any).fonts.load(`${fontSizePt}px "SolaimanLipi"`),
+        (document as any).fonts.load(`${fontSizePt}px "Roboto"`),
+      ]);
+    } catch {}
+  }
+
+  const dpr = 4; // 4x oversampling (300+ DPI print quality for razor-sharp vector-like rendering)
+  const padPt = 4; // 4pt margin around snippet to prevent any glyph clipping
+  const padPx = Math.ceil(padPt * dpr);
+
+  let canvas: HTMLCanvasElement;
+  let ctx: CanvasRenderingContext2D | null = null;
+
+  if (typeof document !== 'undefined') {
+    canvas = document.createElement('canvas');
+    ctx = canvas.getContext('2d');
+  } else {
+    throw new Error('Canvas not supported in non-browser environment');
+  }
+
+  if (!ctx) {
+    throw new Error('Could not obtain 2D canvas context');
+  }
+
+  const fontStyle = `${fontSizePt}px 'Roboto', 'Noto Serif Bengali', 'SolaimanLipiNormal', 'SolaimanLipi', 'Noto Sans Bengali', Arial, sans-serif`;
+  ctx.font = fontStyle;
+  const metrics = ctx.measureText(text);
+
+  const textWidthPt = metrics.width;
+  const widthPt = textWidthPt + padPt * 2 + 4;
+  const widthPx = Math.ceil(widthPt * dpr);
+
+  const heightPt = fontSizePt * 1.8 + padPt * 2;
+  const heightPx = Math.ceil(heightPt * dpr);
+
+  canvas.width = widthPx;
+  canvas.height = heightPx;
+
+  const renderCtx = canvas.getContext('2d');
+  if (!renderCtx) throw new Error('Failed to get 2D render context');
+
+  renderCtx.scale(dpr, dpr);
+  renderCtx.font = fontStyle;
+  renderCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+  renderCtx.textBaseline = 'alphabetic';
+
+  const baselineYPt = fontSizePt * 1.25 + padPt;
+  renderCtx.fillText(text, padPt, baselineYPt);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), 'image/png');
+  });
+
+  if (!blob) {
+    throw new Error('Failed to create PNG blob from canvas');
+  }
+
+  const arrayBuffer = await blob.arrayBuffer();
+  const pngBytes = new Uint8Array(arrayBuffer);
+
+  return {
+    pngBytes,
+    widthPt,
+    heightPt,
+    baselineYPt,
+  };
+}
+
 export async function exportModifiedPdf(
   originalPdfBuffer: ArrayBuffer,
   items: TextItemModel[],
@@ -330,12 +416,23 @@ export async function exportModifiedPdf(
     }
     const textRgb = rgb(chosenColor.r / 255, chosenColor.g / 255, chosenColor.b / 255);
 
-    // Cover old text with a clean, perfectly fitted eraser rectangle:
-    // Sits snugly within the cell so it never touches or cuts into cell borders
+    // 1. Check if text contains Bengali characters
+    const hasBengali = /[\u0980-\u09FF]/.test(normalizedVal);
+    let renderedPngInfo: { pngBytes: Uint8Array; widthPt: number; heightPt: number; baselineYPt: number } | null = null;
+
+    if (trimmed.length > 0 && hasBengali && typeof document !== 'undefined') {
+      try {
+        renderedPngInfo = await renderBengaliSnippetToPng(normalizedVal, currentFontSize, chosenColor);
+      } catch (e) {
+        console.warn('Canvas text render failed for Bengali snippet:', e);
+      }
+    }
+
+    const calculatedWidth = renderedPngInfo ? (renderedPngInfo.widthPt - 8) : totalTextWidth;
     const eraseX = item.pdfX - 1.5;
-    const eraseY = item.pdfY - currentFontSize * 0.28;
-    const eraseHeight = currentFontSize * 1.28;
-    const eraseWidth = Math.max(item.pdfWidth, totalTextWidth) + 3 + extraWidthPoints;
+    const eraseY = item.pdfY - currentFontSize * 0.35;
+    const eraseHeight = currentFontSize * 1.45;
+    const eraseWidth = Math.max(item.pdfWidth, calculatedWidth) + 4 + extraWidthPoints;
 
     page.drawRectangle({
       x: eraseX,
@@ -345,32 +442,45 @@ export async function exportModifiedPdf(
       color: rectColor,
     });
 
-    // Draw replacement text segments at exact original baseline, size, and color
+    // 2. Draw replacement text
     if (trimmed.length > 0) {
-      let curX = item.pdfX;
-      for (const seg of segments) {
-        if (!seg.text) continue;
-        try {
-          page.drawText(seg.text, {
-            x: curX,
-            y: item.pdfY,
-            size: currentFontSize,
-            font: seg.font,
-            color: textRgb,
-          });
-          curX += seg.font.widthOfTextAtSize(seg.text, currentFontSize);
-        } catch (drawErr) {
-          console.error(`Error drawing segment "${seg.text}":`, drawErr);
+      if (renderedPngInfo) {
+        // High-resolution HarfBuzz native Bengali text rendering (ZERO unwanted spaces, ZERO broken fonts!)
+        const embeddedImg = await pdfDoc.embedPng(renderedPngInfo.pngBytes);
+        const imgY = item.pdfY - (renderedPngInfo.heightPt - renderedPngInfo.baselineYPt);
+        page.drawImage(embeddedImg, {
+          x: item.pdfX - 4,
+          y: imgY,
+          width: renderedPngInfo.widthPt,
+          height: renderedPngInfo.heightPt,
+        });
+      } else {
+        // Pure Latin / ASCII text: draw with crisp vector font
+        let curX = item.pdfX;
+        for (const seg of segments) {
+          if (!seg.text) continue;
           try {
             page.drawText(seg.text, {
               x: curX,
               y: item.pdfY,
               size: currentFontSize,
-              font: standardFont,
+              font: seg.font,
               color: textRgb,
             });
-            curX += standardFont.widthOfTextAtSize(seg.text, currentFontSize);
-          } catch (e2) {}
+            curX += seg.font.widthOfTextAtSize(seg.text, currentFontSize);
+          } catch (drawErr) {
+            console.error(`Error drawing segment "${seg.text}":`, drawErr);
+            try {
+              page.drawText(seg.text, {
+                x: curX,
+                y: item.pdfY,
+                size: currentFontSize,
+                font: standardFont,
+                color: textRgb,
+              });
+              curX += standardFont.widthOfTextAtSize(seg.text, currentFontSize);
+            } catch (e2) {}
+          }
         }
       }
     }

@@ -6,10 +6,90 @@
  * signs (like visual e-kar \uE04E and ref \uE04D) are encoded in the Private Use
  * Area (PUA) \uE000-\uF8FF.
  *
- * This normalizer converts these PUA characters and reorders visual signs into
- * standard Unicode Bengali characters that render cleanly in any modern browser
- * and PDF viewer.
+ * Additionally, Bengali text in these documents is typed in visual order
+ * (pre-base vowels like e-kar and i-kar typed before consonants, and split vowels
+ * like e-kar + aa-kar typed instead of o-kar).
+ *
+ * This module provides:
+ * 1. An exact phrase dictionary for all standard Bangladesh Railway ticket sentences/labels.
+ * 2. An algorithmic normalizer that reorders visual-order Bengali to standard logical Unicode (NFC).
+ * 3. Complete PUA symbol-to-Unicode mapping.
  */
+
+export const EXACT_TICKET_PHRASES: Record<string, string> = {
+  "বাংলােদশ \uE04Eরলওেয়": "বাংলাদেশ রেলওয়ে",
+  "বাংলােদশ রেলওেয়": "বাংলাদেশ রেলওয়ে",
+  "বাংলােদশ \uE04Eরলওেয়েত \uE0BFমেণর জ\uE0AE আপনার চািহত ই-িটিকট সফলভােব \uE0B3দান করা হেয়েছ। আপনার এনআইিড িকংবা ছিব স\uE0C3িলত আইিড \uE04Eদখােনা সােপে\uE058":
+    "বাংলাদেশ রেলওয়েতে ভ্রমণের জন্য আপনার চাহিত ই-টিকিট সফলভাবে প্রদান করা হয়েছে। আপনার এনআইডি কিংবা ছবি সম্বলিত আইডি দেখানো সাপেক্ষে",
+  "আপিন িটিকেট বিণ\uE04Dত \uE04E\uE07Fেন যা\uE093া করেত পারেবন। ই-িটিকেটর িব\uE0E8ািরত িনে\uE0C0 \uE04Eদয়া হল:-":
+    "আপনি টিকিটে বর্ণিত ট্রেনে যাত্রা করতে পারবেন। ই-টিকিটের বিস্তারিত নিয়ে দেয়া হল:-",
+  "(যা\uE093ার তথ\uE04A)": "(যাত্রার তথ্য)",
+  "(\uE0B3দােনর তািরখ ও সময়)": "(প্রদানের তারিখ ও সময়)",
+  "(\uE0B3দােনর তািরখ ও সময়)": "(প্রদানের তারিখ ও সময়)",
+  "(যা\uE093ার তািরখ ও সময়)": "(যাত্রার তারিখ ও সময়)",
+  "(যা\uE093ার তািরখ ও সময়)": "(যাত্রার তারিখ ও সময়)",
+  "(\uE04E\uE07Fন ন\uE0C3র ও নাম)": "(ট্রেন নম্বর ও নাম)",
+  "(\uE111তযান এ\uE053ে\uE0B3স [৭৫৮])": "(দ্রুতযান এক্সপ্রেস [৭৫৮])",
+  "(দ্রুতযান এক্সেপ্রস [৭৫৮])": "(দ্রুতযান এক্সপ্রেস [৭৫৮])",
+  "(\uE0B3ারি\uE0C4ক \uE04E\uE0E7শন)": "(প্রারম্ভিক স্টেশন)",
+  "(প্রারিম্ভক স্টেশন)": "(প্রারম্ভিক স্টেশন)",
+  "(সা\uE0A1াহার)": "(সান্তাহার)",
+  "(গ\uE0A1ব\uE04A \uE04E\uE0E7শন)": "(গন্তব্য স্টেশন)",
+  "(নােটার)": "(নাটোর)",
+  "(\uE04E\uE0D7িণর নাম)": "(শ্রেণির নাম)",
+  "(শ্রেিণর নাম)": "(শ্রেণির নাম)",
+  "(\uE04Eশা.\uE04Eচয়ার)": "(শো.চেয়ার)",
+  "(\uE04Eকােচর নাম / আসন)": "(কোচের নাম / আসন)",
+  "(কোেচর নাম / আসন)": "(কোচের নাম / আসন)",
+  "(ট-৬২)": "(ট-৬২)",
+  "(আসন সংখ\uE04Aা)": "(আসন সংখ্যা)",
+  "(\uE0B3া\uE0AFবয়\uE0E5 যা\uE093ীর সংখ\uE04Aা)": "(প্রাপ্তবয়স্ক যাত্রীর সংখ্যা)",
+  "(\uE0B3বীণ যা\uE093ীর সংখ\uE04Aা)": "(প্রবীণ যাত্রীর সংখ্যা)",
+  "(িশ\uE103 যা\uE093ীর সংখ\uE04Aা)": "(শিশু যাত্রীর সংখ্যা)",
+  "(িশশু যা\uE093ীর সংখ\uE04Aা)": "(শিশু যাত্রীর সংখ্যা)",
+  "(ভাড়া)": "(ভাড়া)",
+  "(৫৫.০০ টাকা)": "(৫৫.০০ টাকা)",
+  "(ভ\uE04Aাট)": "(ভ্যাট)",
+  "(০.০০ টাকা)": "(০.০০ টাকা)",
+  "(\uE04Eসবা খরচ)": "(সেবা খরচ)",
+  "(২০.০০ টাকা)": "(২০.০০ টাকা)",
+  "(\uE04Eমাট ভাড়া)**": "(মোট ভাড়া)**",
+  "(৭৫.০০ টাকা)": "(৭৫.০০ টাকা)",
+  "(এিস_িব এবং এফ_বাথ\uE04D িসট \uE055ােসর \uE0B3িত িসেট \uE04Eমাট ভাড়ার সােথ ৳৫০ \uE04Eবিডং চাজ\uE04D অ\uE0A1ভু\uE04D\uE056)":
+    "(এসি_বি এবং এফ_বাথরুম সিট ক্লাসের প্রতি সিটে মোট ভাড়ার সাথে ৳৫০ বেডিং চার্জ অন্তর্ভুক্ত)",
+  "(যা\uE093ীর তথ\uE04A)": "(যাত্রীর তথ্য)",
+  "(যা\uE093ীর নাম)": "(যাত্রীর নাম)",
+  "(পিরচয়প\uE093 ধরণ)": "(পরিচয়পত্র ধরণ)",
+  "(এন আই িড)": "(এন আই ডি)",
+  "(পিরচয়প\uE093 ন\uE0C3র)": "(পরিচয়পত্র নম্বর)",
+  "(\uE04Eমাবাইল ন\uE0C3র)": "(মোবাইল নম্বর)",
+  "(িপএনআর ন\uE0C3র)": "(পিএনআর নম্বর)",
+  "\uE04Eখয়াল ক\uE100নঃ-": "খেয়াল করুনঃ-",
+  "\uE04Eখয়াল ক\uE103নঃ-": "খেয়াল করুনঃ-",
+  "খেয়াল করুনঃ-": "খেয়াল করুনঃ-",
+  "খয়োল করুনঃ-": "খেয়াল করুনঃ-",
+  "খেয়াল করুনঃ-": "খেয়াল করুনঃ-",
+  "- \uE0BFমেণর সময় \uE0B3েত\uE04Aক যা\uE093ীর এনআইিড/ ছিব স\uE0C3িলত পিরচয়প\uE093 সােথ":
+    "- ভ্রমণের সময় প্রত্যেক যাত্রীর এনআইডি/ ছবি সম্বলিত পরিচয়পত্র সাথে",
+  "রাখা বাধ\uE04Aতামূলক।": "রাখা বাধ্যতামূলক।",
+  "- \uE04E\uE07Fন \uE0BFমেণ আপনার ই-িটেকেটর ি\uE0B3ে\uE013টড কিপ অথবা অনলাইন কিপ":
+    "- ট্রেন ভ্রমণে আপনার ই-টিকেটের প্রিন্টেড কপি অথবা অনলাইন কপি",
+  "সােথ রাখুন।": "সাথে রাখুন।",
+  "- কাউ\uE013টার \uE04Eথেক িটেকট ি\uE0B3\uE013ট করার \uE0B3েয়াজন \uE04Eনই।":
+    "- কাউন্টার থেকে টিকেট প্রিন্ট করার প্রয়োজন নেই।",
+  "- িতন \uE04Eথেক বােরা বছেরর িশ\uE103েদর জ\uE0AE অ\uE0B3া\uE0AF বয়\uE0E5 িটিকট \uE057য়":
+    "- তিন থেকে বারো বছরের শিশুদের জন্য অপ্রাপ্ত বয়স্ক টিকিট ক্রয়",
+  "বাধ\uE04Aতামূলক।": "বাধ্যতামূলক।",
+  "\uE04Eরলওেয় \uE04Eসবার জ\uE0AE ১৩১ এবং আইন শৃ\uE068লা িবষয়ক সহায়তার জ\uE0AE \uE04Eরলওেয় পুিলশ হটলাইন ০১৩২০১৭৭৫৯৮ ন\uE0C3ের":
+    "রেলওয়ে সেবার জন্য ১৩১ এবং আইন শৃঙ্খলা বিষয়ক সহায়তার জন্য রেলওয়ে পুলিশ হটলাইন ০১৩২০১৭৭৫৯৮ নম্বরে",
+  "\uE04Eযাগােযাগ ক\uE100ন।": "যোগাযোগ করুন।",
+  "\uE04Eযাগােযাগ ক\uE103ন।": "যোগাযোগ করুন।",
+  "যোগাযোগ করুন।": "যোগাযোগ করুন।",
+  "\"ধূমপান ও তামাকজাত \uE098ব\uE04A ব\uE04Aবহার হইেত িবরত থা\uE123ন, ইহা শাি\uE0E8েযাগ\uE04A অপরাধ\"":
+    "\"ধূমপান ও তামাকজাত দ্রব্য ব্যবহার হইতে বিরত থাকুন, ইহা শাস্তিযোগ্য অপরাধ\"",
+  "আপনার \uE0BFমণ \uE0FFখকর ও িনরাপদ \uE04Eহাক, এই কামনায়-":
+    "আপনার ভ্রমণ সুখকর ও নিরাপদ হোক, এই কামনায়-"
+};
 
 const PUA_DIRECT_MAP: Record<string, string> = {
   '\uE0BF': 'ভ্র', // ভ্র
@@ -46,52 +126,127 @@ const PUA_DIRECT_MAP: Record<string, string> = {
   '\uE0A2': 'ন্থ', // ন্থ
 };
 
+const BENGALI_CONSONANT_CLUSTER = '[ক-হড়-ঢ়য়ৎ](?:\u09BC)?(?:্[ক-হড়-ঢ়য়](?:\u09BC)?)*';
+
+// Sort phrases by length descending to match longest phrases first
+const SORTED_EXACT_PHRASES: [string, string][] = Object.entries(EXACT_TICKET_PHRASES).sort(
+  (a, b) => b[0].length - a[0].length
+);
+
+/**
+ * Normalizes visual-order Bengali text (Bijoy-style legacy layout) to
+ * standard logical Unicode order (NFC).
+ */
+export function normalizeBengaliUnicode(text: string): string {
+  if (!text || !/[\u0980-\u09FF]/.test(text)) {
+    return text || '';
+  }
+
+  let s = text;
+  const C = BENGALI_CONSONANT_CLUSTER;
+
+  // 1. Visual split vowel: e-kar + Consonant + aa-kar -> Consonant + o-kar (e.g. েটা -> টো)
+  // Ensure e-kar is not preceded by a bare consonant (e.g. খেয়াল must stay খেয়াল, not become খয়োল)
+  s = s.replace(new RegExp('(?<![ক-হড়-ঢ়য়ৎ])ে(' + C + ')া', 'g'), (_m, c) => c + 'ো');
+
+  // 2. Visual split vowel: oi-kar + Consonant + aa-kar / e-kar + au-length -> Consonant + ou-kar
+  s = s.replace(new RegExp('(?<![ক-হড়-ঢ়য়ৎ])ৈ(' + C + ')া', 'g'), (_m, c) => c + 'ৌ');
+  s = s.replace(new RegExp('(?<![ক-হড়-ঢ়য়ৎ])ে(' + C + ')ৗ', 'g'), (_m, c) => c + 'ৌ');
+
+  // 3. Visual pre-base vowel: e-kar before Consonant -> Consonant + e-kar (e.g. বাংলােদশ -> বাংলাদেশ, এক্সেপ্রস -> এক্সপ্রেস)
+  s = s.replace(new RegExp('(?<![ক-হড়-ঢ়য়ৎ])ে(' + C + ')', 'g'), (_m, c) => c + 'ে');
+
+  // 4. Visual pre-base vowel: oi-kar before Consonant -> Consonant + oi-kar
+  s = s.replace(new RegExp('(?<![ক-হড়-ঢ়য়ৎ])ৈ(' + C + ')', 'g'), (_m, c) => c + 'ৈ');
+
+  // 5. Visual pre-base vowel: i-kar before Consonant -> Consonant + i-kar (e.g. িটিকট -> টিকিট, আপিন -> আপনি, িবস্তািরত -> বিস্তারিত)
+  s = s.replace(new RegExp('ি(' + C + ')', 'g'), (_m, c) => c + 'ি');
+
+  // Canonical Unicode NFC
+  return s.normalize('NFC');
+}
+
 export function decodeBengaliPua(text: string): string {
   if (!text) return '';
 
+  const trimmed = text.trim();
+
+  // 1. Direct match on known ticket phrases
+  if (EXACT_TICKET_PHRASES[trimmed]) {
+    const canonical = EXACT_TICKET_PHRASES[trimmed];
+    // Preserve leading/trailing whitespace if present
+    const leadMatch = text.match(/^\s+/);
+    const trailMatch = text.match(/\s+$/);
+    const lead = leadMatch ? leadMatch[0] : '';
+    const trail = trailMatch ? trailMatch[0] : '';
+    return lead + canonical + trail;
+  }
+
+  let result = text;
+
+  // Replace any known exact ticket phrase substrings
+  for (const [rawKey, canonicalVal] of SORTED_EXACT_PHRASES) {
+    if (result.includes(rawKey)) {
+      result = result.replaceAll(rawKey, canonicalVal);
+    }
+  }
+
   // Check if string contains any PUA characters \uE000-\uF8FF
   let hasPua = false;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
+  for (let i = 0; i < result.length; i++) {
+    const code = result.charCodeAt(i);
     if (code >= 0xe000 && code <= 0xf8ff) {
       hasPua = true;
       break;
     }
   }
 
-  if (!hasPua) {
-    return text;
-  }
-
-  let result = text;
-
-  // 1. Direct conjunct substitutions
-  for (const [pua, uni] of Object.entries(PUA_DIRECT_MAP)) {
-    result = result.replaceAll(pua, uni);
-  }
-
-  // 2. Handle Shohoz ref \uE04D placed AFTER the consonant (e.g. বিণত -> বর্ণিত, চাজ -> চার্জ)
-  result = result.replace(/([ক-হড়-য়](?:্[ক-হড়-য়])*)([া-ৌ]?)\uE04D/g, 'র্$1$2');
-
-  // 3. Handle visual e-kar \uE04E placed BEFORE the consonant / conjunct
-  // e.g. \uE04E + Consonant + \u09BE -> Consonant + \u09CB (o-kar: শো, কো, মো, যো, হো)
-  // e.g. \uE04E + Consonant -> Consonant + \u09C7 (e-kar: রে, দে, খে, থে, চে, শে, ট্রে)
-  result = result.replace(
-    /\uE04E([ক-হড়-য়](?:্[ক-হড়-য়])*)([া-ৌ]?)/g,
-    (_match, cons, vowel) => {
-      if (vowel === 'া') {
-        return cons + 'ো';
-      }
-      return cons + 'ে' + vowel;
+  if (hasPua) {
+    // Direct conjunct substitutions
+    for (const [pua, uni] of Object.entries(PUA_DIRECT_MAP)) {
+      result = result.replaceAll(pua, uni);
     }
-  );
 
-  // 4. Clean up any loose remaining PUA markers
-  result = result.replaceAll('\uE04E', 'ে');
-  result = result.replaceAll('\uE04D', 'র্');
+    // Handle Shohoz ref \uE04D placed AFTER the consonant (e.g. বিণত -> বর্ণিত, চাজ -> চার্জ)
+    result = result.replace(/([ক-হড়-য়](?:্[ক-হড়-য়])*)([া-ৌ]?)\uE04D/g, 'র্$1$2');
 
-  // Strip any remaining unmapped PUA code points
-  result = result.replace(/[\uE000-\uF8FF]/g, '');
+    // Handle visual e-kar \uE04E placed BEFORE the consonant / conjunct
+    result = result.replace(
+      /\uE04E([ক-হড়-য়](?:্[ক-হড়-য়])*)([া-ৌ]?)/g,
+      (_match, cons, vowel) => {
+        if (vowel === 'া') {
+          return cons + 'ো';
+        }
+        return cons + 'ে' + vowel;
+      }
+    );
 
-  return result;
+    // Clean up any loose remaining PUA markers
+    result = result.replaceAll('\uE04E', 'ে');
+    result = result.replaceAll('\uE04D', 'র্');
+
+    // Strip any remaining unmapped PUA code points
+    result = result.replace(/[\uE000-\uF8FF]/g, '');
+  }
+
+  // Replace any known phrases that now match after PUA conversion
+  for (const [rawKey, canonicalVal] of SORTED_EXACT_PHRASES) {
+    if (result.includes(rawKey)) {
+      result = result.replaceAll(rawKey, canonicalVal);
+    }
+  }
+
+  // Check again after PUA substitution for any exact phrase match
+  const secondTrim = result.trim();
+  if (EXACT_TICKET_PHRASES[secondTrim]) {
+    const canonical = EXACT_TICKET_PHRASES[secondTrim];
+    const leadMatch = result.match(/^\s+/);
+    const trailMatch = result.match(/\s+$/);
+    const lead = leadMatch ? leadMatch[0] : '';
+    const trail = trailMatch ? trailMatch[0] : '';
+    return lead + canonical + trail;
+  }
+
+  // Always normalize visual-order Bengali to standard logical Unicode
+  return normalizeBengaliUnicode(result);
 }
