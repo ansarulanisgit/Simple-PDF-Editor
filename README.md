@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Simple PDF Editor
+
+A fast, 100% client-side in-place PDF editor built with Next.js 16, React 19, Tailwind CSS, PDF.js, PDF-Lib, and Fontkit. 
+
+## Key Features
+
+- **100% Client-Side Privacy**: All processing runs in the browser via Web Workers and HTML5 Canvas. Your documents are never uploaded to any server.
+- **In-Place Text Editing**: Every text snippet in the PDF is recognized, grouped by line, and made editable in place with a tap or click.
+- **Flawless Bengali Typography**: Uses **Noto Serif Bengali** with full OpenType Indic V2 (`bng2`) complex conjunct support (`রুপসা`, `এক্সপ্রেস`, `দ্রুতযান`, `শো.চেয়ার`, `যাত্রার তথ্য`). Zero broken glyphs or misplaced vowel markers.
+- **Dynamic Font & Color Matching**: Automatically matches original fonts (such as `Roboto Regular` for Bangladesh Railway e-tickets and standard Latin fonts) and samples exact text/background colors.
+- **Adaptive Background Matching**: Seamlessly blends eraser boxes over colored table banners, dark headers, and light paper backgrounds.
+- **Full Offline Support**: Includes all 169 PDF.js CMap character maps bundled locally in `public/cmaps/`.
+- **Undo / Redo & History**: Full keyboard shortcut support (`Ctrl+Z`, `Ctrl+Y`, `Ctrl+Shift+Z`) and reset controls.
+- **Responsive & Dark Mode**: Optimized for desktop and mobile touchscreens with automatic fit-to-width scaling and instant theme toggling.
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18.18+ or 20+
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/ansarulanisgit/Simple-PDF-Editor.git
+cd Simple-PDF-Editor
+
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy to Vercel
 
-## Learn More
+This application is ready for 1-click deployment on [Vercel](https://vercel.com).
 
-To learn more about Next.js, take a look at the following resources:
+### Option 1: Import via Vercel Dashboard
+1. Go to [vercel.com/new](https://vercel.com/new).
+2. Connect your GitHub account and select `ansarulanisgit/Simple-PDF-Editor`.
+3. Framework Preset: **Next.js** (auto-detected).
+4. Click **Deploy**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Option 2: Deploy using Vercel CLI
+```bash
+npm install -g vercel
+vercel
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Tech Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Framework**: Next.js 16 (App Router, Turbopack)
+- **UI Library**: React 19
+- **Styling**: Tailwind CSS v4
+- **PDF Rendering**: `pdfjs-dist` (v4.10.38)
+- **PDF Modification & Export**: `pdf-lib` + `@pdf-lib/fontkit`
+- **Compression**: `pako`
+- **Icons**: `lucide-react`
