@@ -8,6 +8,7 @@ import {
   Undo2,
   Redo2,
   RotateCcw,
+  Train,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -23,6 +24,9 @@ interface ToolbarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  isDemoTicket?: boolean;
+  currentTrain?: 'drutojan' | 'rupsha';
+  onOpenTrainModal?: () => void;
 }
 
 export function Toolbar({
@@ -38,6 +42,9 @@ export function Toolbar({
   canRedo,
   onUndo,
   onRedo,
+  isDemoTicket,
+  currentTrain,
+  onOpenTrainModal,
 }: ToolbarProps) {
   const zoomIn = () => {
     onScaleChange(Math.min(3.0, Number((scale + 0.2).toFixed(2))));
@@ -114,6 +121,19 @@ export function Toolbar({
 
         {/* Separate Action Buttons: Reset, Undo, Redo */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Train Selector (Demo Ticket) */}
+          {isDemoTicket && onOpenTrainModal && (
+            <button
+              type="button"
+              onClick={onOpenTrainModal}
+              className="h-7 sm:h-8 px-2 sm:px-2.5 flex items-center gap-1 sm:gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition shadow-2xs cursor-pointer active:scale-95 font-semibold"
+              title="Change train between Drutojan and Rupsha"
+            >
+              <Train className="w-3.5 h-3.5" />
+              <span className="text-[11px] sm:text-xs capitalize">{currentTrain || 'Train'}</span>
+            </button>
+          )}
+
           {/* Reset Button */}
           <button
             type="button"

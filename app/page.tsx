@@ -15,7 +15,8 @@ import { Toolbar } from '@/components/Toolbar';
 import { FileUploader } from '@/components/FileUploader';
 import { PdfPageViewer } from '@/components/PdfPageViewer';
 import { TextEditModal } from '@/components/TextEditModal';
-import { getDynamicIssueDate } from '@/lib/date-utils';
+import { TrainSelectionModal } from '@/components/TrainSelectionModal';
+import { getDynamicIssueDate, getDynamicJourneyDate, TrainOption } from '@/lib/date-utils';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function PdfEditorPage() {
@@ -33,6 +34,11 @@ export default function PdfEditorPage() {
   // Configurations map keyed by text item ID: text, fontSize, extraWidth
   const [configsMap, setConfigsMap] = useState<Record<string, ItemEditConfig>>({});
   const [selectedItem, setSelectedItem] = useState<TextItemModel | null>(null);
+
+  // Train selection modal state for demo ticket
+  const [isTrainModalOpen, setIsTrainModalOpen] = useState<boolean>(false);
+  const [selectedTrain, setSelectedTrain] = useState<TrainOption>('drutojan');
+  const [hasPromptedTrain, setHasPromptedTrain] = useState<boolean>(false);
 
   // Undo / Redo History Stack
   const [history, setHistory] = useState<Record<string, ItemEditConfig>[]>([{}]);
@@ -159,6 +165,9 @@ export default function PdfEditorPage() {
       setPageItemsCache({});
       setSelectedItem(null);
       setCurrentPage(0);
+      setHasPromptedTrain(false);
+      setSelectedTrain('drutojan');
+      setIsTrainModalOpen(false);
 
       // Load document into pdfjs-dist using a cloned buffer slice
       const doc = await loadPdfDocument(safeBuffer.slice(0));
@@ -207,27 +216,59 @@ export default function PdfEditorPage() {
             [cacheKey]: items,
           }));
 
-          // When loading the demo ticket (page 0 containing demo issue date),
-          // automatically set the Issue Date dynamically to 3 days before today (in English and Bangla)
+          // When loading the demo ticket (page 0),
+          // automatically open train modal and set dynamic Issue Date, Journey Date, and Train Name
           if (currentPage === 0) {
             const demoIssueItem = items.find(
               (it) =>
                 (it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')) &&
                 (it.originalText.includes('12:20') || it.originalText.includes('১২:২০'))
             );
+            const demoJourneyItem = items.find(
+              (it) =>
+                (it.originalText.includes('26-09-2026') || it.originalText.includes('২৬-০৯-২০২৬')) &&
+                (it.originalText.includes('12:40') || it.originalText.includes('১২:৪০'))
+            );
+            const demoTrainItem = items.find(
+              (it) =>
+                it.originalText.includes('DRUTOJAN EXPRESS') ||
+                it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
+                (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
+            );
 
-            if (demoIssueItem) {
+            const isDemo = Boolean(demoIssueItem || demoJourneyItem || demoTrainItem);
+
+            if (isDemo && !hasPromptedTrain) {
+              setIsTrainModalOpen(true);
+              setHasPromptedTrain(true);
+            }
+
+            if (isDemo) {
               const { fullIssueText } = getDynamicIssueDate();
+              const journeyInfo = getDynamicJourneyDate(selectedTrain);
+
               setConfigsMap((prev) => {
-                if (prev[demoIssueItem.id]) return prev;
-                const next = {
-                  ...prev,
-                  [demoIssueItem.id]: {
-                    text: fullIssueText,
-                  },
-                };
-                setHistory([next]);
-                return next;
+                let changed = false;
+                const next = { ...prev };
+
+                if (demoIssueItem && !prev[demoIssueItem.id]) {
+                  next[demoIssueItem.id] = { text: fullIssueText };
+                  changed = true;
+                }
+                if (demoJourneyItem && !prev[demoJourneyItem.id]) {
+                  next[demoJourneyItem.id] = { text: journeyInfo.fullJourneyText };
+                  changed = true;
+                }
+                if (demoTrainItem && !prev[demoTrainItem.id]) {
+                  next[demoTrainItem.id] = { text: journeyInfo.trainNameText };
+                  changed = true;
+                }
+
+                if (changed) {
+                  setHistory([next]);
+                  return next;
+                }
+                return prev;
               });
             }
           }
@@ -242,7 +283,55 @@ export default function PdfEditorPage() {
     return () => {
       isCancelled = true;
     };
-  }, [pdfDoc, pagesInfo, currentPage, groupLines, pageItemsCache]);
+  }, [pdfDoc, pagesInfo, currentPage, groupLines, pageItemsCache, hasPromptedTrain, selectedTrain]);
+
+  // Switch train selection and update ticket fields accordingly
+  const handleSelectTrain = useCallback(
+    (train: TrainOption) => {
+      setSelectedTrain(train);
+      const journeyInfo = getDynamicJourneyDate(train);
+
+      const page0Items = pageItemsCache[0] || [];
+      const demoJourneyItem = page0Items.find(
+        (it) =>
+          (it.originalText.includes('26-09-2026') || it.originalText.includes('২৬-০৯-২০২৬')) &&
+          (it.originalText.includes('12:40') || it.originalText.includes('১২:৪০'))
+      );
+      const demoTrainItem = page0Items.find(
+        (it) =>
+          it.originalText.includes('DRUTOJAN EXPRESS') ||
+          it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
+          (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
+      );
+
+      setConfigsMap((prev) => {
+        const next = { ...prev };
+        if (demoJourneyItem) {
+          next[demoJourneyItem.id] = {
+            ...(next[demoJourneyItem.id] || {}),
+            text: journeyInfo.fullJourneyText,
+          };
+        }
+        if (demoTrainItem) {
+          next[demoTrainItem.id] = {
+            ...(next[demoTrainItem.id] || {}),
+            text: journeyInfo.trainNameText,
+          };
+        }
+        pushHistory(next);
+        return next;
+      });
+
+      setNotification({
+        type: 'success',
+        message:
+          train === 'rupsha'
+            ? 'Selected Rupsha Express (Train 728, 12:05)'
+            : 'Selected Drutojan Express (Train 758, 12:40)',
+      });
+    },
+    [pageItemsCache, pushHistory]
+  );
 
   // Save updated config from modal
   const handleSaveConfig = useCallback(
@@ -277,15 +366,34 @@ export default function PdfEditorPage() {
       const isDemoIssue = page0Items.some(
         (it) => it.id === id && (it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬'))
       );
+      const isDemoJourney = page0Items.some(
+        (it) =>
+          it.id === id &&
+          (it.originalText.includes('26-09-2026') || it.originalText.includes('২৬-০৯-২০২৬'))
+      );
+      const isDemoTrain = page0Items.some(
+        (it) =>
+          it.id === id &&
+          (it.originalText.includes('DRUTOJAN EXPRESS') ||
+            it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
+            (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0))
+      );
+
       if (isDemoIssue) {
         const { fullIssueText } = getDynamicIssueDate();
         next[id] = { text: fullIssueText };
+      } else if (isDemoJourney) {
+        const journeyInfo = getDynamicJourneyDate(selectedTrain);
+        next[id] = { text: journeyInfo.fullJourneyText };
+      } else if (isDemoTrain) {
+        const journeyInfo = getDynamicJourneyDate(selectedTrain);
+        next[id] = { text: journeyInfo.trainNameText };
       } else {
         delete next[id];
       }
       pushHistory(next);
     },
-    [configsMap, pageItemsCache, pushHistory]
+    [configsMap, pageItemsCache, selectedTrain, pushHistory]
   );
 
   // Cache sampled colors from canvas rendering for exact match on export and overlay
@@ -323,17 +431,39 @@ export default function PdfEditorPage() {
     const demoIssueItem = page0Items.find(
       (it) => it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')
     );
+    const demoJourneyItem = page0Items.find(
+      (it) =>
+        (it.originalText.includes('26-09-2026') || it.originalText.includes('২৬-০৯-২০২৬')) &&
+        (it.originalText.includes('12:40') || it.originalText.includes('১২:৪০'))
+    );
+    const demoTrainItem = page0Items.find(
+      (it) =>
+        it.originalText.includes('DRUTOJAN EXPRESS') ||
+        it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
+        (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
+    );
+
     const resetConfigs: Record<string, ItemEditConfig> = {};
     if (demoIssueItem) {
       const { fullIssueText } = getDynamicIssueDate();
       resetConfigs[demoIssueItem.id] = { text: fullIssueText };
     }
+    if (demoJourneyItem || demoTrainItem) {
+      const journeyInfo = getDynamicJourneyDate(selectedTrain);
+      if (demoJourneyItem) {
+        resetConfigs[demoJourneyItem.id] = { text: journeyInfo.fullJourneyText };
+      }
+      if (demoTrainItem) {
+        resetConfigs[demoTrainItem.id] = { text: journeyInfo.trainNameText };
+      }
+    }
+
     pushHistory(resetConfigs);
     setNotification({
       type: 'success',
       message: 'All edits have been reset to original values.',
     });
-  }, [pageItemsCache, pushHistory]);
+  }, [pageItemsCache, selectedTrain, pushHistory]);
 
   // Start fresh with a new document
   const handleNewFile = () => {
@@ -353,6 +483,9 @@ export default function PdfEditorPage() {
     setSelectedItem(null);
     setCurrentPage(0);
     setScale(1.5);
+    setHasPromptedTrain(false);
+    setSelectedTrain('drutojan');
+    setIsTrainModalOpen(false);
   };
 
   // Clean up PDF.js worker on component unmount
@@ -366,6 +499,17 @@ export default function PdfEditorPage() {
     };
   }, [pdfDoc]);
 
+  // Identify whether the currently loaded document is the Bangladesh Railway demo ticket
+  const isDemoTicket = useMemo(() => {
+    const page0Items = pageItemsCache[0] || [];
+    return page0Items.some(
+      (it) =>
+        it.originalText.includes('23-09-2026') ||
+        it.originalText.includes('26-09-2026') ||
+        it.originalText.includes('DRUTOJAN EXPRESS')
+    );
+  }, [pageItemsCache]);
+
   // Calculate stats
   const currentItems = pageItemsCache[currentPage] || [];
 
@@ -375,19 +519,38 @@ export default function PdfEditorPage() {
     const demoIssueItem = page0Items.find(
       (it) => it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')
     );
+    const demoJourneyItem = page0Items.find(
+      (it) =>
+        (it.originalText.includes('26-09-2026') || it.originalText.includes('২৬-০৯-২০২৬')) &&
+        (it.originalText.includes('12:40') || it.originalText.includes('১২:৪০'))
+    );
+    const demoTrainItem = page0Items.find(
+      (it) =>
+        it.originalText.includes('DRUTOJAN EXPRESS') ||
+        it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
+        (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
+    );
+
     const { fullIssueText } = getDynamicIssueDate();
+    const journeyInfo = getDynamicJourneyDate(selectedTrain);
+
     for (const [id, cfg] of Object.entries(configsMap)) {
-      if (
-        demoIssueItem &&
-        id === demoIssueItem.id &&
-        (typeof cfg === 'string' ? cfg === fullIssueText : cfg.text === fullIssueText && !cfg.fontSize && !cfg.extraWidth)
-      ) {
+      const cfgText = typeof cfg === 'string' ? cfg : cfg.text;
+      const isCustomized = typeof cfg === 'object' && (Boolean(cfg.fontSize) || Boolean(cfg.extraWidth));
+
+      if (demoIssueItem && id === demoIssueItem.id && cfgText === fullIssueText && !isCustomized) {
+        continue;
+      }
+      if (demoJourneyItem && id === demoJourneyItem.id && cfgText === journeyInfo.fullJourneyText && !isCustomized) {
+        continue;
+      }
+      if (demoTrainItem && id === demoTrainItem.id && cfgText === journeyInfo.trainNameText && !isCustomized) {
         continue;
       }
       count++;
     }
     return count;
-  }, [configsMap, pageItemsCache]);
+  }, [configsMap, pageItemsCache, selectedTrain]);
 
   // Export modified PDF
   const handleExport = async () => {
@@ -499,6 +662,9 @@ export default function PdfEditorPage() {
               canRedo={canRedo}
               onUndo={handleUndo}
               onRedo={handleRedo}
+              isDemoTicket={isDemoTicket}
+              currentTrain={selectedTrain}
+              onOpenTrainModal={() => setIsTrainModalOpen(true)}
             />
 
             {/* Document Canvas and Overlay Canvas */}
@@ -538,6 +704,14 @@ export default function PdfEditorPage() {
             handleResetField(selectedItem.id);
           }
         }}
+      />
+
+      {/* Train Selection Modal for Demo Ticket */}
+      <TrainSelectionModal
+        isOpen={isTrainModalOpen}
+        selectedTrain={selectedTrain}
+        onSelectTrain={handleSelectTrain}
+        onClose={() => setIsTrainModalOpen(false)}
       />
     </div>
   );
