@@ -133,10 +133,11 @@ export async function extractPageTextRuns(
     const gap = item.pdfX - prevRight;
     const sameFontSize = Math.abs(item.fontSize - currentGroup.fontSize) <= 3.0;
 
-    // Strict adjacency threshold:
-    // A normal inter-word space is 2 to 5 points.
-    // If the gap is > 6.0 points, it indicates a separate table column or distinct data field.
-    const maxGap = Math.min(Math.max(currentGroup.fontSize * 0.45, 3.0), 6.5);
+    // Natural word/phrase adjacency threshold:
+    // A normal inter-word or compound token gap is 2 to 6 points (e.g. "TA-62" to "(ট-৬২)" is 3.95 pt).
+    // Table columns are separated by 30-100+ points, so a threshold up to 8.5 points safely
+    // groups compound value tokens within the same cell while strictly keeping columns separate.
+    const maxGap = Math.min(Math.max(currentGroup.fontSize * 0.75, 5.0), 8.5);
     const isAdjacent = gap >= -3.0 && gap <= maxGap;
 
     if (sameY && isAdjacent && sameFontSize) {

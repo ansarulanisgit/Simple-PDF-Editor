@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileText, Sparkles, AlertCircle, ShieldCheck } from 'lucide-react';
+import { getDynamicIssueDate } from '@/lib/date-utils';
 
 interface FileUploaderProps {
   onFileSelect: (file: File | { name: string; buffer: ArrayBuffer }) => void;
@@ -62,8 +63,9 @@ export function FileUploader({ onFileSelect, isLoading }: FileUploaderProps) {
         throw new Error('Failed to load demo PDF');
       }
       const buffer = await res.arrayBuffer();
+      const { dynamicFileNamePart } = getDynamicIssueDate();
       onFileSelect({
-        name: 'BDRAILWAY_TICKET2026092312220870385853.pdf',
+        name: `BDRAILWAY_TICKET${dynamicFileNamePart}12220870385853.pdf`,
         buffer,
       });
     } catch (err) {

@@ -15,6 +15,7 @@ import { Toolbar } from '@/components/Toolbar';
 import { FileUploader } from '@/components/FileUploader';
 import { PdfPageViewer } from '@/components/PdfPageViewer';
 import { TextEditModal } from '@/components/TextEditModal';
+import { getDynamicIssueDate } from '@/lib/date-utils';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function PdfEditorPage() {
@@ -205,6 +206,31 @@ export default function PdfEditorPage() {
             ...prev,
             [cacheKey]: items,
           }));
+
+          // When loading the demo ticket (page 0 containing demo issue date),
+          // automatically set the Issue Date dynamically to 3 days before today (in English and Bangla)
+          if (currentPage === 0) {
+            const demoIssueItem = items.find(
+              (it) =>
+                (it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')) &&
+                (it.originalText.includes('12:20') || it.originalText.includes('১২:২০'))
+            );
+
+            if (demoIssueItem) {
+              const { fullIssueText } = getDynamicIssueDate();
+              setConfigsMap((prev) => {
+                if (prev[demoIssueItem.id]) return prev;
+                const next = {
+                  ...prev,
+                  [demoIssueItem.id]: {
+                    text: fullIssueText,
+                  },
+                };
+                setHistory([next]);
+                return next;
+              });
+            }
+          }
         }
       } catch (err) {
         console.error(`Error extracting text for page ${currentPage + 1}:`, err);
@@ -247,10 +273,19 @@ export default function PdfEditorPage() {
   const handleResetField = useCallback(
     (id: string) => {
       const next = { ...configsMap };
-      delete next[id];
+      const page0Items = pageItemsCache[0] || [];
+      const isDemoIssue = page0Items.some(
+        (it) => it.id === id && (it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬'))
+      );
+      if (isDemoIssue) {
+        const { fullIssueText } = getDynamicIssueDate();
+        next[id] = { text: fullIssueText };
+      } else {
+        delete next[id];
+      }
       pushHistory(next);
     },
-    [configsMap, pushHistory]
+    [configsMap, pageItemsCache, pushHistory]
   );
 
   // Cache sampled colors from canvas rendering for exact match on export and overlay
@@ -284,12 +319,21 @@ export default function PdfEditorPage() {
 
   // Revert all edits across the document
   const handleResetAll = useCallback(() => {
-    pushHistory({});
+    const page0Items = pageItemsCache[0] || [];
+    const demoIssueItem = page0Items.find(
+      (it) => it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')
+    );
+    const resetConfigs: Record<string, ItemEditConfig> = {};
+    if (demoIssueItem) {
+      const { fullIssueText } = getDynamicIssueDate();
+      resetConfigs[demoIssueItem.id] = { text: fullIssueText };
+    }
+    pushHistory(resetConfigs);
     setNotification({
       type: 'success',
       message: 'All edits have been reset to original values.',
     });
-  }, [pushHistory]);
+  }, [pageItemsCache, pushHistory]);
 
   // Start fresh with a new document
   const handleNewFile = () => {
@@ -326,8 +370,24 @@ export default function PdfEditorPage() {
   const currentItems = pageItemsCache[currentPage] || [];
 
   const totalEditedCount = useMemo(() => {
-    return Object.keys(configsMap).length;
-  }, [configsMap]);
+    let count = 0;
+    const page0Items = pageItemsCache[0] || [];
+    const demoIssueItem = page0Items.find(
+      (it) => it.originalText.includes('23-09-2026') || it.originalText.includes('২৩-০৯-২০২৬')
+    );
+    const { fullIssueText } = getDynamicIssueDate();
+    for (const [id, cfg] of Object.entries(configsMap)) {
+      if (
+        demoIssueItem &&
+        id === demoIssueItem.id &&
+        (typeof cfg === 'string' ? cfg === fullIssueText : cfg.text === fullIssueText && !cfg.fontSize && !cfg.extraWidth)
+      ) {
+        continue;
+      }
+      count++;
+    }
+    return count;
+  }, [configsMap, pageItemsCache]);
 
   // Export modified PDF
   const handleExport = async () => {
