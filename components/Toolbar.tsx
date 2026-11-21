@@ -26,6 +26,8 @@ interface ToolbarProps {
   onRedo: () => void;
   isDemoTicket?: boolean;
   currentTrain?: 'drutojan' | 'rupsha';
+  currentCoach?: string;
+  currentSeat?: number;
   onOpenTrainModal?: () => void;
 }
 
@@ -44,6 +46,8 @@ export function Toolbar({
   onRedo,
   isDemoTicket,
   currentTrain,
+  currentCoach,
+  currentSeat,
   onOpenTrainModal,
 }: ToolbarProps) {
   const zoomIn = () => {
@@ -127,10 +131,13 @@ export function Toolbar({
               type="button"
               onClick={onOpenTrainModal}
               className="h-7 sm:h-8 px-2 sm:px-2.5 flex items-center gap-1 sm:gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition shadow-2xs cursor-pointer active:scale-95 font-semibold"
-              title="Change train between Drutojan and Rupsha"
+              title="Change train, coach, and seat details"
             >
               <Train className="w-3.5 h-3.5" />
-              <span className="text-[11px] sm:text-xs capitalize">{currentTrain || 'Train'}</span>
+              <span className="text-[11px] sm:text-xs capitalize">
+                {currentTrain || 'Train'}
+                {currentCoach && currentSeat ? ` • ${currentCoach}-${currentSeat}` : ''}
+              </span>
             </button>
           )}
 

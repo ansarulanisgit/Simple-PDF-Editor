@@ -72,3 +72,35 @@ export function getDynamicJourneyDate(train: TrainOption): {
     trainNameText,
   };
 }
+
+export interface CoachOption {
+  bn: string;
+  en: string;
+}
+
+export const COACH_OPTIONS: CoachOption[] = [
+  { bn: 'ক', en: 'KA' },
+  { bn: 'খ', en: 'KHA' },
+  { bn: 'গ', en: 'GA' },
+  { bn: 'ঘ', en: 'GHA' },
+  { bn: 'ঙ', en: 'UMA' },
+  { bn: 'চ', en: 'CHA' },
+  { bn: 'ছ', en: 'SCHA' },
+  { bn: 'জ', en: 'JA' },
+  { bn: 'ঝ', en: 'JHA' },
+  { bn: 'ঞ', en: 'NEO' },
+  { bn: 'ট', en: 'TA' },
+  { bn: 'ঠ', en: 'THA' },
+];
+
+export function formatSeatNumber(num: number): { en: string; bn: string } {
+  const BENGALI_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+  const en = num < 10 ? `0${num}` : `${num}`;
+  const bn = en.replace(/\d/g, (d) => BENGALI_DIGITS[parseInt(d, 10)]);
+  return { en, bn };
+}
+
+export function formatCoachSeat(coach: CoachOption, seatNum: number): string {
+  const { en: seatEn, bn: seatBn } = formatSeatNumber(seatNum);
+  return `${coach.en}-${seatEn} (${coach.bn}-${seatBn})`;
+}

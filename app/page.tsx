@@ -16,7 +16,14 @@ import { FileUploader } from '@/components/FileUploader';
 import { PdfPageViewer } from '@/components/PdfPageViewer';
 import { TextEditModal } from '@/components/TextEditModal';
 import { TrainSelectionModal } from '@/components/TrainSelectionModal';
-import { getDynamicIssueDate, getDynamicJourneyDate, TrainOption } from '@/lib/date-utils';
+import {
+  getDynamicIssueDate,
+  getDynamicJourneyDate,
+  TrainOption,
+  COACH_OPTIONS,
+  formatCoachSeat,
+  formatSeatNumber,
+} from '@/lib/date-utils';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function PdfEditorPage() {
@@ -35,9 +42,11 @@ export default function PdfEditorPage() {
   const [configsMap, setConfigsMap] = useState<Record<string, ItemEditConfig>>({});
   const [selectedItem, setSelectedItem] = useState<TextItemModel | null>(null);
 
-  // Train selection modal state for demo ticket
+  // Train, coach, and seat selection modal state for demo ticket
   const [isTrainModalOpen, setIsTrainModalOpen] = useState<boolean>(false);
   const [selectedTrain, setSelectedTrain] = useState<TrainOption>('drutojan');
+  const [selectedCoach, setSelectedCoach] = useState<string>('TA');
+  const [selectedSeat, setSelectedSeat] = useState<number>(62);
   const [hasPromptedTrain, setHasPromptedTrain] = useState<boolean>(false);
 
   // Undo / Redo History Stack
@@ -167,6 +176,8 @@ export default function PdfEditorPage() {
       setCurrentPage(0);
       setHasPromptedTrain(false);
       setSelectedTrain('drutojan');
+      setSelectedCoach('TA');
+      setSelectedSeat(62);
       setIsTrainModalOpen(false);
 
       // Load document into pdfjs-dist using a cloned buffer slice
@@ -217,7 +228,7 @@ export default function PdfEditorPage() {
           }));
 
           // When loading the demo ticket (page 0),
-          // automatically open train modal and set dynamic Issue Date, Journey Date, and Train Name
+          // automatically open train modal and set dynamic Issue Date, Journey Date, Train Name, and Coach/Seat
           if (currentPage === 0) {
             const demoIssueItem = items.find(
               (it) =>
@@ -235,8 +246,14 @@ export default function PdfEditorPage() {
                 it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
                 (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
             );
+            const demoCoachItem = items.find(
+              (it) =>
+                it.originalText.includes('TA-62') ||
+                it.originalText.includes('ট-৬২') ||
+                (Math.abs(it.pdfY - 564.1) < 3.0 && it.pdfX > 250)
+            );
 
-            const isDemo = Boolean(demoIssueItem || demoJourneyItem || demoTrainItem);
+            const isDemo = Boolean(demoIssueItem || demoJourneyItem || demoTrainItem || demoCoachItem);
 
             if (isDemo && !hasPromptedTrain) {
               setIsTrainModalOpen(true);
@@ -246,6 +263,8 @@ export default function PdfEditorPage() {
             if (isDemo) {
               const { fullIssueText } = getDynamicIssueDate();
               const journeyInfo = getDynamicJourneyDate(selectedTrain);
+              const coachOpt = COACH_OPTIONS.find((c) => c.en === selectedCoach) || COACH_OPTIONS[10];
+              const coachSeatText = formatCoachSeat(coachOpt, selectedSeat);
 
               setConfigsMap((prev) => {
                 let changed = false;
@@ -261,6 +280,10 @@ export default function PdfEditorPage() {
                 }
                 if (demoTrainItem && !prev[demoTrainItem.id]) {
                   next[demoTrainItem.id] = { text: journeyInfo.trainNameText };
+                  changed = true;
+                }
+                if (demoCoachItem && !prev[demoCoachItem.id]) {
+                  next[demoCoachItem.id] = { text: coachSeatText };
                   changed = true;
                 }
 
@@ -283,13 +306,18 @@ export default function PdfEditorPage() {
     return () => {
       isCancelled = true;
     };
-  }, [pdfDoc, pagesInfo, currentPage, groupLines, pageItemsCache, hasPromptedTrain, selectedTrain]);
+  }, [pdfDoc, pagesInfo, currentPage, groupLines, pageItemsCache, hasPromptedTrain, selectedTrain, selectedCoach, selectedSeat]);
 
-  // Switch train selection and update ticket fields accordingly
-  const handleSelectTrain = useCallback(
-    (train: TrainOption) => {
+  // Apply train, coach, and seat selection to update ticket fields simultaneously
+  const handleApplyTrainSelection = useCallback(
+    (train: TrainOption, coachCode: string, seatNumber: number) => {
       setSelectedTrain(train);
+      setSelectedCoach(coachCode);
+      setSelectedSeat(seatNumber);
+
       const journeyInfo = getDynamicJourneyDate(train);
+      const coachOpt = COACH_OPTIONS.find((c) => c.en === coachCode) || COACH_OPTIONS[10];
+      const coachSeatText = formatCoachSeat(coachOpt, seatNumber);
 
       const page0Items = pageItemsCache[0] || [];
       const demoJourneyItem = page0Items.find(
@@ -302,6 +330,12 @@ export default function PdfEditorPage() {
           it.originalText.includes('DRUTOJAN EXPRESS') ||
           it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
           (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
+      );
+      const demoCoachItem = page0Items.find(
+        (it) =>
+          it.originalText.includes('TA-62') ||
+          it.originalText.includes('ট-৬২') ||
+          (Math.abs(it.pdfY - 564.1) < 3.0 && it.pdfX > 250)
       );
 
       setConfigsMap((prev) => {
@@ -318,16 +352,20 @@ export default function PdfEditorPage() {
             text: journeyInfo.trainNameText,
           };
         }
+        if (demoCoachItem) {
+          next[demoCoachItem.id] = {
+            ...(next[demoCoachItem.id] || {}),
+            text: coachSeatText,
+          };
+        }
         pushHistory(next);
         return next;
       });
 
+      const { en: seatEn, bn: seatBn } = formatSeatNumber(seatNumber);
       setNotification({
         type: 'success',
-        message:
-          train === 'rupsha'
-            ? 'Selected Rupsha Express (Train 728, 12:05)'
-            : 'Selected Drutojan Express (Train 758, 12:40)',
+        message: `Updated to ${train === 'rupsha' ? 'Rupsha' : 'Drutojan'}, Coach: ${coachOpt.bn} (${coachOpt.en}), Seat: ${seatEn} (${seatBn})`,
       });
     },
     [pageItemsCache, pushHistory]
@@ -378,6 +416,13 @@ export default function PdfEditorPage() {
             it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
             (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0))
       );
+      const isDemoCoach = page0Items.some(
+        (it) =>
+          it.id === id &&
+          (it.originalText.includes('TA-62') ||
+            it.originalText.includes('ট-৬২') ||
+            (Math.abs(it.pdfY - 564.1) < 3.0 && it.pdfX > 250))
+      );
 
       if (isDemoIssue) {
         const { fullIssueText } = getDynamicIssueDate();
@@ -388,12 +433,15 @@ export default function PdfEditorPage() {
       } else if (isDemoTrain) {
         const journeyInfo = getDynamicJourneyDate(selectedTrain);
         next[id] = { text: journeyInfo.trainNameText };
+      } else if (isDemoCoach) {
+        const coachOpt = COACH_OPTIONS.find((c) => c.en === selectedCoach) || COACH_OPTIONS[10];
+        next[id] = { text: formatCoachSeat(coachOpt, selectedSeat) };
       } else {
         delete next[id];
       }
       pushHistory(next);
     },
-    [configsMap, pageItemsCache, selectedTrain, pushHistory]
+    [configsMap, pageItemsCache, selectedTrain, selectedCoach, selectedSeat, pushHistory]
   );
 
   // Cache sampled colors from canvas rendering for exact match on export and overlay
@@ -442,6 +490,12 @@ export default function PdfEditorPage() {
         it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
         (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
     );
+    const demoCoachItem = page0Items.find(
+      (it) =>
+        it.originalText.includes('TA-62') ||
+        it.originalText.includes('ট-৬২') ||
+        (Math.abs(it.pdfY - 564.1) < 3.0 && it.pdfX > 250)
+    );
 
     const resetConfigs: Record<string, ItemEditConfig> = {};
     if (demoIssueItem) {
@@ -457,13 +511,17 @@ export default function PdfEditorPage() {
         resetConfigs[demoTrainItem.id] = { text: journeyInfo.trainNameText };
       }
     }
+    if (demoCoachItem) {
+      const coachOpt = COACH_OPTIONS.find((c) => c.en === selectedCoach) || COACH_OPTIONS[10];
+      resetConfigs[demoCoachItem.id] = { text: formatCoachSeat(coachOpt, selectedSeat) };
+    }
 
     pushHistory(resetConfigs);
     setNotification({
       type: 'success',
       message: 'All edits have been reset to original values.',
     });
-  }, [pageItemsCache, selectedTrain, pushHistory]);
+  }, [pageItemsCache, selectedTrain, selectedCoach, selectedSeat, pushHistory]);
 
   // Start fresh with a new document
   const handleNewFile = () => {
@@ -485,6 +543,8 @@ export default function PdfEditorPage() {
     setScale(1.5);
     setHasPromptedTrain(false);
     setSelectedTrain('drutojan');
+    setSelectedCoach('TA');
+    setSelectedSeat(62);
     setIsTrainModalOpen(false);
   };
 
@@ -506,7 +566,8 @@ export default function PdfEditorPage() {
       (it) =>
         it.originalText.includes('23-09-2026') ||
         it.originalText.includes('26-09-2026') ||
-        it.originalText.includes('DRUTOJAN EXPRESS')
+        it.originalText.includes('DRUTOJAN EXPRESS') ||
+        it.originalText.includes('TA-62')
     );
   }, [pageItemsCache]);
 
@@ -530,9 +591,17 @@ export default function PdfEditorPage() {
         it.originalText.includes('দ্রুতযান এক্সপ্রেস') ||
         (it.originalText.includes('758') && Math.abs(it.pdfY - 615.57) < 3.0)
     );
+    const demoCoachItem = page0Items.find(
+      (it) =>
+        it.originalText.includes('TA-62') ||
+        it.originalText.includes('ট-৬২') ||
+        (Math.abs(it.pdfY - 564.1) < 3.0 && it.pdfX > 250)
+    );
 
     const { fullIssueText } = getDynamicIssueDate();
     const journeyInfo = getDynamicJourneyDate(selectedTrain);
+    const coachOpt = COACH_OPTIONS.find((c) => c.en === selectedCoach) || COACH_OPTIONS[10];
+    const coachSeatText = formatCoachSeat(coachOpt, selectedSeat);
 
     for (const [id, cfg] of Object.entries(configsMap)) {
       const cfgText = typeof cfg === 'string' ? cfg : cfg.text;
@@ -547,10 +616,13 @@ export default function PdfEditorPage() {
       if (demoTrainItem && id === demoTrainItem.id && cfgText === journeyInfo.trainNameText && !isCustomized) {
         continue;
       }
+      if (demoCoachItem && id === demoCoachItem.id && cfgText === coachSeatText && !isCustomized) {
+        continue;
+      }
       count++;
     }
     return count;
-  }, [configsMap, pageItemsCache, selectedTrain]);
+  }, [configsMap, pageItemsCache, selectedTrain, selectedCoach, selectedSeat]);
 
   // Export modified PDF
   const handleExport = async () => {
@@ -664,6 +736,8 @@ export default function PdfEditorPage() {
               onRedo={handleRedo}
               isDemoTicket={isDemoTicket}
               currentTrain={selectedTrain}
+              currentCoach={selectedCoach}
+              currentSeat={selectedSeat}
               onOpenTrainModal={() => setIsTrainModalOpen(true)}
             />
 
@@ -710,7 +784,9 @@ export default function PdfEditorPage() {
       <TrainSelectionModal
         isOpen={isTrainModalOpen}
         selectedTrain={selectedTrain}
-        onSelectTrain={handleSelectTrain}
+        selectedCoach={selectedCoach}
+        selectedSeat={selectedSeat}
+        onApply={handleApplyTrainSelection}
         onClose={() => setIsTrainModalOpen(false)}
       />
     </div>
