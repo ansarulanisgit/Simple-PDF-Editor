@@ -1,6 +1,6 @@
 /**
  * Calculates dynamic Bangladesh Railway demo ticket issue date:
- * exactly 3 days before today at 10:28 (১০:২৮), formatted in English (DD-MM-YYYY) and
+ * exactly 5 days before today at 10:28 (১০:২৮), formatted in English (DD-MM-YYYY) and
  * Bengali digits (DD-MM-YYYY).
  */
 export function getDynamicIssueDate(): {
@@ -10,7 +10,7 @@ export function getDynamicIssueDate(): {
   dynamicFileNamePart: string;
 } {
   const d = new Date();
-  d.setDate(d.getDate() - 3);
+  d.setDate(d.getDate() - 5);
 
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
